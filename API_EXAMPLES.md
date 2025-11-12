@@ -3,7 +3,7 @@
 ## Ingest Metrics
 
 ```bash
-curl -X POST http://localhost:8080/api/ingest \
+curl -X POST http://your-backend-url:8080/api/ingest \
   -H "Content-Type: application/json" \
   -d '{
     "deviceId": "sim-device-001",
@@ -39,7 +39,7 @@ curl -X POST http://localhost:8080/api/ingest \
 ## List Devices
 
 ```bash
-curl http://localhost:8080/api/devices
+curl http://your-backend-url:8080/api/devices
 ```
 
 **Response:**
@@ -64,13 +64,13 @@ curl http://localhost:8080/api/devices
 ## Get Device by ID
 
 ```bash
-curl http://localhost:8080/api/devices/sim-device-001
+curl http://your-backend-url:8080/api/devices/sim-device-001
 ```
 
 ## Create Device
 
 ```bash
-curl -X POST http://localhost:8080/api/devices \
+curl -X POST http://your-backend-url:8080/api/devices \
   -H "Content-Type: application/json" \
   -d '{
     "name": "New Device",
@@ -82,13 +82,13 @@ curl -X POST http://localhost:8080/api/devices \
 
 ```bash
 # Get latest 100 metrics for a device
-curl "http://localhost:8080/api/metrics?deviceId=sim-device-001&limit=100"
+curl "http://your-backend-url:8080/api/metrics?deviceId=sim-device-001&limit=100"
 
 # Get metrics in time range
-curl "http://localhost:8080/api/metrics?deviceId=sim-device-001&from=2024-01-01T00:00:00Z&to=2024-01-01T23:59:59Z&limit=1000"
+curl "http://your-backend-url:8080/api/metrics?deviceId=sim-device-001&from=2024-01-01T00:00:00Z&to=2024-01-01T23:59:59Z&limit=1000"
 
 # Get all metrics (paginated)
-curl "http://localhost:8080/api/metrics?limit=50&offset=0"
+curl "http://your-backend-url:8080/api/metrics?limit=50&offset=0"
 ```
 
 **Response:**
@@ -123,16 +123,16 @@ curl "http://localhost:8080/api/metrics?limit=50&offset=0"
 
 ```bash
 # Get latest anomalies
-curl "http://localhost:8080/api/anomalies?limit=50"
+curl "http://your-backend-url:8080/api/anomalies?limit=50"
 
 # Filter by device
-curl "http://localhost:8080/api/anomalies?deviceId=sim-device-001&limit=50"
+curl "http://your-backend-url:8080/api/anomalies?deviceId=sim-device-001&limit=50"
 
 # Filter by type
-curl "http://localhost:8080/api/anomalies?type=isoforest&limit=50"
+curl "http://your-backend-url:8080/api/anomalies?type=isoforest&limit=50"
 
 # Filter by time range
-curl "http://localhost:8080/api/anomalies?from=2024-01-01T00:00:00Z&to=2024-01-01T23:59:59Z&limit=100"
+curl "http://your-backend-url:8080/api/anomalies?from=2024-01-01T00:00:00Z&to=2024-01-01T23:59:59Z&limit=100"
 ```
 
 **Response:**
@@ -173,7 +173,7 @@ curl "http://localhost:8080/api/anomalies?from=2024-01-01T00:00:00Z&to=2024-01-0
 ## Health Check
 
 ```bash
-curl http://localhost:8080/api/health
+curl http://your-backend-url:8080/api/health
 ```
 
 **Response:**

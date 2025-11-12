@@ -88,7 +88,7 @@ edge-iot-anomaly-agent/
    ```
 
 3. **View dashboard:**
-   Open http://localhost:3000
+   Open http://your-dashboard-url:3000
 
 ## Testing
 

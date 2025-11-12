@@ -92,5 +92,5 @@ echo ""
 echo "Next steps:"
 echo "  1. Start services: cd infra && docker compose up --build"
 echo "  2. Run agent: make run-agent"
-echo "  3. Open dashboard: http://localhost:3000"
+echo "  3. Open dashboard: http://your-dashboard-url:3000"
 

@@ -1,6 +1,6 @@
 # Real-Time C++ Edge Agent for IoT Metrics
 
-![Build Status](https://img.shields.io/github/actions/workflow/status/zaydabash/real-time-iot-edge-agent/ci.yml?branch=main)
+![Build Status](https://img.shields.io/github/actions/workflow/status/YOUR_USERNAME/real-time-iot-edge-agent/ci.yml?branch=main)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Node](https://img.shields.io/badge/node-20+-green.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)
@@ -130,8 +130,8 @@ This will:
 - Start PostgreSQL on port 5432
 - Run Prisma migrations automatically
 - Seed demo devices
-- Start backend API on http://localhost:8080
-- Start dashboard on http://localhost:3000
+- Start backend API on port 8080
+- Start dashboard on port 3000
 
 ### Run Agent
 
@@ -145,7 +145,7 @@ make run-agent
 make run-vibration
 ```
 
-The agent will start streaming metrics. Open http://localhost:3000 to see the dashboard update in real-time.
+The agent will start streaming metrics. Open the dashboard in your browser to see updates in real-time.
 
 ### Example Agent Output
 
@@ -155,7 +155,7 @@ $ make run-agent
 IoT Edge Agent - Starting...
 Configuration:
   Device ID: sim-device-001
-  API URL: http://localhost:8080
+  API URL: http://your-backend-url:8080
   Interval: 1000 ms
   Anomaly Probability: 0.05
   Local Analytics: Enabled (window=200, z-threshold=3.0)
@@ -175,7 +175,7 @@ IoT Vibration Sensor Module - Starting...
 Features: FFT-based anomaly detection + Local analytics
 Configuration:
   Device ID: sim-device-001
-  API URL: http://localhost:8080
+  API URL: http://your-backend-url:8080
   Interval: 1000 ms
 Starting vibration monitoring loop...
 FFT window: 256 samples, Local analytics window: 200 samples
@@ -202,18 +202,18 @@ iot-backend  | Generated Prisma Client
 iot-backend  | Migrations applied
 iot-backend  | Seeding database...
 iot-backend  | Server started successfully!
-iot-backend  |    API: http://localhost:8080
+iot-backend  |    API: http://localhost:8080 (internal)
 iot-backend  |    Engine: isoforest
 
 iot-dashboard | ▲ Next.js 14.2.33
-iot-dashboard | - Local:        http://localhost:3000
+iot-dashboard | - Local:        http://localhost:3000 (internal)
 iot-dashboard | ✓ Ready in 2.3s
 ```
 
 ### Example API Response
 
 ```bash
-$ curl http://localhost:8080/api/health
+$ curl http://your-backend-url:8080/api/health
 
 {
   "status": "ok",
@@ -309,7 +309,7 @@ Copy `.env.example` to `.env` and customize:
 
 ```bash
 # Database
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/iot
+DATABASE_URL=postgresql://postgres:postgres@db:5432/iot
 
 # Backend
 BACKEND_PORT=8080
@@ -318,7 +318,7 @@ ANOMALY_WINDOW_SIZE=512
 ALLOW_AUTO_DEVICE=true
 
 # Dashboard
-NEXT_PUBLIC_BACKEND_URL=http://localhost:8080
+NEXT_PUBLIC_BACKEND_URL=http://your-backend-url:8080
 ```
 
 ### Agent Configuration
@@ -328,7 +328,7 @@ Edit `agent-cpp/config/agent.json`:
 ```json
 {
   "device_id": "sim-device-001",
-  "api_base_url": "http://localhost:8080",
+  "api_base_url": "http://your-backend-url:8080",
   "interval_ms": 1000,
   "jitter_ms": 100,
   "anomaly_probability": 0.05,
@@ -344,7 +344,7 @@ Edit `agent-cpp/config/agent.json`:
 Or override via CLI:
 
 ```bash
-./agent --device_id=my-device --api_base_url=http://localhost:8080 --interval_ms=2000
+./agent --device_id=my-device --api_base_url=http://your-backend-url:8080 --interval_ms=2000
 ```
 
 ## API Documentation
@@ -545,7 +545,7 @@ make dev
 # In another terminal, run agent
 make run-agent
 
-# Verify metrics appear in dashboard at http://localhost:3000
+# Verify metrics appear in dashboard
 ```
 
 ## Troubleshooting
@@ -567,15 +567,15 @@ make db-seed
 
 ### Agent Not Connecting
 
-- Verify backend is running: `curl http://localhost:8080/api/health`
+- Verify backend is running: `curl http://your-backend-url:8080/api/health`
 - Check agent config: `cat agent-cpp/config/agent.json`
-- Verify network: agent should reach `http://localhost:8080`
+- Verify network: agent should reach your backend URL
 
 ### No Anomalies Detected
 
 - Check anomaly engine: `echo $ANOMALY_ENGINE`
 - Increase anomaly probability in agent config
-- Verify metrics are being ingested: `curl http://localhost:8080/api/metrics?limit=10`
+- Verify metrics are being ingested: `curl http://your-backend-url:8080/api/metrics?limit=10`
 
 ### Dashboard Not Updating
 

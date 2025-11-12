@@ -4,7 +4,7 @@
 
 The backend is now running successfully!
 
-- **Backend API**: http://localhost:8080
+- **Backend API**: http://your-backend-url:8080
 - **Database**: PostgreSQL on port 5432  
 - **Dashboard**: Port 3000 is currently in use (see below)
 
@@ -15,7 +15,7 @@ The backend is now running successfully!
 cd infra && docker compose ps
 
 # Check backend health
-curl http://localhost:8080/api/health
+curl http://your-backend-url:8080/api/health
 
 # View backend logs
 cd infra && docker compose logs -f backend
@@ -53,7 +53,7 @@ Then restart:
 cd infra && docker compose up -d dashboard
 ```
 
-Access dashboard at: http://localhost:3001
+Access dashboard at: http://your-dashboard-url:3001
 
 ## Run the Agent
 
@@ -77,17 +77,17 @@ make
 
 1. **Check backend health:**
    ```bash
-   curl http://localhost:8080/api/health
+   curl http://your-backend-url:8080/api/health
    ```
 
 2. **List devices:**
    ```bash
-   curl http://localhost:8080/api/devices
+   curl http://your-backend-url:8080/api/devices
    ```
 
 3. **Send test metrics:**
    ```bash
-   curl -X POST http://localhost:8080/api/ingest \
+   curl -X POST http://your-backend-url:8080/api/ingest \
      -H "Content-Type: application/json" \
      -d '{
        "deviceId": "test-device-001",
@@ -101,12 +101,12 @@ make
    ```
 
 4. **View dashboard:**
-   Open http://localhost:3000 (or 3001 if you changed the port)
+   Open http://your-dashboard-url:3000 (or 3001 if you changed the port)
 
 ## Troubleshooting
 
 - **Backend not starting**: Check logs with `docker compose logs backend`
 - **Database connection issues**: Ensure PostgreSQL container is healthy
 - **Port conflicts**: Change ports in `docker-compose.yml` or stop conflicting services
-- **Agent not connecting**: Verify backend is running: `curl http://localhost:8080/api/health`
+- **Agent not connecting**: Verify backend is running: `curl http://your-backend-url:8080/api/health`
 

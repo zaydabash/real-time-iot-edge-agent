@@ -16,8 +16,8 @@ docker compose up --build
 
 This starts:
 - PostgreSQL on port 5432
-- Backend API on http://localhost:8080
-- Dashboard on http://localhost:3000
+- Backend API on http://your-backend-url:8080
+- Dashboard on http://your-dashboard-url:3000
 
 Wait for all services to be healthy (check with `docker compose ps`).
 
@@ -41,7 +41,7 @@ make
 
 ## 3. View Dashboard
 
-Open http://localhost:3000 in your browser.
+Open http://your-dashboard-url:3000 in your browser.
 
 You should see:
 - Real-time metrics streaming
@@ -52,16 +52,16 @@ You should see:
 
 ```bash
 # Health check
-curl http://localhost:8080/api/health
+curl http://your-backend-url:8080/api/health
 
 # List devices
-curl http://localhost:8080/api/devices
+curl http://your-backend-url:8080/api/devices
 
 # Query metrics
-curl "http://localhost:8080/api/metrics?deviceId=sim-device-001&limit=10"
+curl "http://your-backend-url:8080/api/metrics?deviceId=sim-device-001&limit=10"
 
 # Query anomalies
-curl "http://localhost:8080/api/anomalies?limit=10"
+curl "http://your-backend-url:8080/api/anomalies?limit=10"
 ```
 
 ## Troubleshooting
@@ -79,7 +79,7 @@ docker compose logs backend
 ```
 
 ### Agent not connecting
-- Verify backend is running: `curl http://localhost:8080/api/health`
+- Verify backend is running: `curl http://your-backend-url:8080/api/health`
 - Check agent config: `cat agent-cpp/config/agent.json`
 - Verify network connectivity
 
