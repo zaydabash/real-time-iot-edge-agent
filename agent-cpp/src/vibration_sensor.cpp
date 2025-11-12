@@ -1,5 +1,6 @@
 #include "config.hpp"
 #include "http_client.hpp"
+#include "fft_analyzer.hpp"
 #include "local_analytics.hpp"
 #include <iostream>
 #include <chrono>
@@ -23,56 +24,50 @@ std::string getCurrentTimestamp() {
     return oss.str();
 }
 
-// Generate simulated metrics
-MetricPoint generateMetrics(double t, double anomaly_prob, std::mt19937& gen, std::normal_distribution<>& normal_dist) {
-    MetricPoint point;
-    point.ts = getCurrentTimestamp();
-
-    // Base values with sinusoidal variation
-    double temp_base = 22.0 + 3.0 * std::sin(t / 60.0); // ~1 minute cycle
-    double vib_base = 0.02;
-    double hum_base = 45.0;
-    double volt_base = 4.9;
-
+// Generate vibration signal with frequency components
+double generateVibrationSignal(double t, std::mt19937& gen, std::normal_distribution<>& normal_dist) {
+    // Base vibration from rotating machinery (e.g., 30 Hz motor)
+    double base_freq = 30.0; // Hz
+    double base_amplitude = 0.02; // g
+    
+    // Normal vibration signal
+    double vibration = base_amplitude * std::sin(2.0 * M_PI * base_freq * t);
+    
+    // Add harmonics (2nd and 3rd)
+    vibration += 0.005 * std::sin(2.0 * M_PI * base_freq * 2.0 * t);
+    vibration += 0.002 * std::sin(2.0 * M_PI * base_freq * 3.0 * t);
+    
     // Add noise
-    double temp_noise = normal_dist(gen) * 0.2;
-    double vib_noise = std::abs(normal_dist(gen) * 0.01);
-    double hum_noise = normal_dist(gen) * 0.5;
-    double volt_noise = normal_dist(gen) * 0.01;
-
+    vibration += std::abs(normal_dist(gen) * 0.01);
+    
     // Occasionally inject anomalies
     std::uniform_real_distribution<> anomaly_dist(0.0, 1.0);
-    bool inject_anomaly = anomaly_dist(gen) < anomaly_prob;
-
+    bool inject_anomaly = anomaly_dist(gen) < 0.05; // 5% probability
+    
     if (inject_anomaly) {
-        // Temperature spike
+        // High-frequency resonance (bearing failure simulation)
         if (anomaly_dist(gen) < 0.5) {
-            temp_noise += 8.0; // +8C spike
-            std::cout << "[ANOMALY] Temperature spike detected!" << std::endl;
+            vibration += 0.3 * std::sin(2.0 * M_PI * 150.0 * t); // 150 Hz resonance
+            std::cout << "[FFT ANOMALY] High-frequency resonance detected!" << std::endl;
         } else {
-            // Vibration spike
-            vib_noise += 0.5; // Large vibration spike
-            std::cout << "[ANOMALY] Vibration spike detected!" << std::endl;
+            // Amplitude spike (imbalance)
+            vibration += 0.5;
+            std::cout << "[FFT ANOMALY] Vibration amplitude spike detected!" << std::endl;
         }
     }
-
-    point.temperature_c = temp_base + temp_noise;
-    point.vibration_g = vib_base + vib_noise;
-    point.humidity_pct = hum_base + hum_noise;
-    point.voltage_v = volt_base + volt_noise;
-
-    return point;
+    
+    return std::abs(vibration); // Vibration is always positive magnitude
 }
 
 int main(int argc, char* argv[]) {
-    std::cout << "IoT Edge Agent - Starting..." << std::endl;
+    std::cout << "IoT Vibration Sensor Module - Starting..." << std::endl;
+    std::cout << "Features: FFT-based anomaly detection + Local analytics" << std::endl;
 
     // Load configuration
     AgentConfig config;
     
-    // Try to load from file first (relative to executable or current directory)
+    // Try to load from file first
     std::string config_path = "config/agent.json";
-    // Also try parent directory if running from build/
     if (!config.loadFromFile(config_path)) {
         config.loadFromFile("../config/agent.json");
     }
@@ -87,14 +82,15 @@ int main(int argc, char* argv[]) {
     std::cout << "  Device ID: " << config.device_id << std::endl;
     std::cout << "  API URL: " << config.api_base_url << std::endl;
     std::cout << "  Interval: " << config.interval_ms << " ms" << std::endl;
-    std::cout << "  Anomaly Probability: " << config.anomaly_probability << std::endl;
 
     // Initialize HTTP client
     HttpClient client(config.api_base_url);
 
-    // Initialize local analytics for edge-side anomaly detection
+    // Initialize FFT analyzer (1000 Hz sample rate)
+    FFTAnalyzer fft_analyzer(256, 1000.0);
+    
+    // Initialize local analytics
     LocalAnalytics local_analytics(200, 3.0);
-    std::cout << "  Local Analytics: Enabled (window=200, z-threshold=3.0)" << std::endl;
 
     // Random number generator
     std::random_device rd;
@@ -110,42 +106,58 @@ int main(int argc, char* argv[]) {
     const int max_retries = 3;
     const int retry_delay_ms = 1000;
 
-    std::cout << "Starting metric collection loop..." << std::endl;
+    std::cout << "Starting vibration monitoring loop..." << std::endl;
+    std::cout << "FFT window: 256 samples, Local analytics window: 200 samples" << std::endl;
 
     while (true) {
         try {
-            // Generate metrics
-            MetricPoint point = generateMetrics(t, config.anomaly_probability, gen, normal_dist);
+            // Generate vibration signal
+            double vibration = generateVibrationSignal(t, gen, normal_dist);
 
-            // Update local analytics for each metric
-            bool temp_anomaly = local_analytics.updateMetric("temperature", point.temperature_c);
-            bool vib_anomaly = local_analytics.updateMetric("vibration", point.vibration_g);
-            bool hum_anomaly = local_analytics.updateMetric("humidity", point.humidity_pct);
-            bool volt_anomaly = local_analytics.updateMetric("voltage", point.voltage_v);
+            // Add to FFT analyzer
+            bool fft_anomaly = fft_analyzer.addSample(vibration);
 
-            // Get z-scores
-            double temp_z = local_analytics.getZScore("temperature", point.temperature_c);
-            double vib_z = local_analytics.getZScore("vibration", point.vibration_g);
+            // Update local analytics
+            bool local_anomaly = local_analytics.updateMetric("vibration", vibration);
+            
+            // Get z-score from local analytics
+            double z_score = local_analytics.getZScore("vibration", vibration);
+            auto stats = local_analytics.getStats("vibration");
 
-            // Print metrics with local analytics
-            std::cout << "[" << point.ts << "] "
-                      << "Temp: " << std::fixed << std::setprecision(2) << point.temperature_c << "°C"
-                      << " (z=" << std::setprecision(2) << temp_z << "), "
-                      << "Vib: " << point.vibration_g << "g"
-                      << " (z=" << std::setprecision(2) << vib_z << "), "
-                      << "Hum: " << point.humidity_pct << "%, "
-                      << "Volt: " << point.voltage_v << "V";
+            // Print metrics with analytics
+            std::cout << "[" << getCurrentTimestamp() << "] "
+                      << "Vib: " << std::fixed << std::setprecision(4) << vibration << "g, "
+                      << "Z-score: " << std::setprecision(2) << z_score << ", "
+                      << "Mean: " << stats.mean << ", "
+                      << "StdDev: " << stats.stddev;
 
-            // Show local anomaly detection
-            if (temp_anomaly || vib_anomaly || hum_anomaly || volt_anomaly) {
-                std::cout << " [LOCAL ANOMALY";
-                if (temp_anomaly) std::cout << " TEMP";
-                if (vib_anomaly) std::cout << " VIB";
-                if (hum_anomaly) std::cout << " HUM";
-                if (volt_anomaly) std::cout << " VOLT";
+            // Anomaly flags
+            if (fft_anomaly || local_anomaly) {
+                std::cout << " [ANOMALY";
+                if (fft_anomaly) std::cout << " FFT";
+                if (local_anomaly) std::cout << " LOCAL";
                 std::cout << "]";
             }
             std::cout << std::endl;
+
+            // Perform FFT analysis periodically (every 256 samples)
+            if (fft_analyzer.getSamples().size() >= 256) {
+                auto fd = fft_analyzer.analyze();
+                std::cout << "  [FFT] Dominant freq: " << std::fixed << std::setprecision(2) 
+                          << fd.dominant_freq << " Hz, "
+                          << "Total power: " << fd.total_power << std::endl;
+            }
+
+            // Create metric point (vibration sensor only sends vibration)
+            MetricPoint point;
+            point.ts = getCurrentTimestamp();
+            point.temperature_c = 0.0; // Not measured by vibration sensor
+            point.vibration_g = vibration;
+            point.humidity_pct = 0.0; // Not measured
+            point.voltage_v = 0.0; // Not measured
+
+            // Add anomaly flags to metric (could be sent as metadata)
+            // For now, we'll send the metric and let backend detect anomalies too
 
             // Send metrics with retry logic
             std::vector<MetricPoint> metrics = {point};

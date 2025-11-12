@@ -20,27 +20,39 @@ else()
     message(STATUS "nlohmann/json not found - using manual JSON formatting")
 endif()
 
-# Source files
-set(SOURCES
-    src/main.cpp
+# Common source files
+set(COMMON_SOURCES
     src/http_client.cpp
     src/config.cpp
 )
 
-set(HEADERS
+set(COMMON_HEADERS
     include/http_client.hpp
     include/config.hpp
+    include/local_analytics.hpp
+    include/fft_analyzer.hpp
 )
 
-# Create executable
-add_executable(agent ${SOURCES} ${HEADERS})
+# Main agent executable (with local analytics)
+set(AGENT_SOURCES
+    src/main.cpp
+    ${COMMON_SOURCES}
+)
 
-# Link libraries
+add_executable(agent ${AGENT_SOURCES} ${COMMON_HEADERS})
 target_link_libraries(agent ${CURL_LIBRARIES})
-
-# Compiler options
 target_compile_options(agent PRIVATE -Wall -Wextra -O2)
 
-# Install target
-install(TARGETS agent DESTINATION bin)
+# Vibration sensor executable (with FFT + local analytics)
+set(VIBRATION_SOURCES
+    src/vibration_sensor.cpp
+    ${COMMON_SOURCES}
+)
+
+add_executable(vibration_sensor ${VIBRATION_SOURCES} ${COMMON_HEADERS})
+target_link_libraries(vibration_sensor ${CURL_LIBRARIES})
+target_compile_options(vibration_sensor PRIVATE -Wall -Wextra -O2)
+
+# Install targets
+install(TARGETS agent vibration_sensor DESTINATION bin)
 
