@@ -2,7 +2,7 @@
  * API Client for Backend
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8080';
+const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://your-backend-url:8080';
 
 export interface Device {
   id: string;

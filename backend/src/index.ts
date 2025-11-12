@@ -80,10 +80,10 @@ async function startServer() {
 
     httpServer.listen(PORT, () => {
       logger.info(`Server running on port ${PORT}`);
-      logger.info(`API available at http://localhost:${PORT}`);
+      logger.info(`API available on port ${PORT}`);
       logger.info(`Anomaly engine: ${process.env.ANOMALY_ENGINE || 'isoforest'}`);
       console.log(`\nServer started successfully!`);
-      console.log(`   API: http://localhost:${PORT}`);
+      console.log(`   API: http://localhost:${PORT} (internal)`);
       console.log(`   Engine: ${process.env.ANOMALY_ENGINE || 'isoforest'}\n`);
     });
   } catch (error) {

@@ -48,7 +48,7 @@ namespace {
 
 AgentConfig::AgentConfig()
     : device_id("sim-device-001")
-    , api_base_url("http://localhost:8080")
+    , api_base_url("http://your-backend-url:8080")
     , interval_ms(1000)
     , jitter_ms(100)
     , anomaly_probability(0.05)
