@@ -1,4 +1,4 @@
-.PHONY: build clean run
+.PHONY: build clean run run-vibration
 
 BUILD_DIR = build
 
@@ -11,4 +11,7 @@ clean:
 
 run: build
 	cd $(BUILD_DIR) && ./agent
+
+run-vibration: build
+	cd $(BUILD_DIR) && ./vibration_sensor
 

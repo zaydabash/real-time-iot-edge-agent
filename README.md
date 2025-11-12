@@ -1,28 +1,103 @@
 # Real-Time C++ Edge Agent for IoT Metrics
 
+![Build Status](https://img.shields.io/github/actions/workflow/status/zaydabash/real-time-iot-edge-agent/ci.yml?branch=main)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Node](https://img.shields.io/badge/node-20+-green.svg)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)
+![C++](https://img.shields.io/badge/C++-17-orange.svg)
+![Docker](https://img.shields.io/badge/docker-ready-blue.svg)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-blue.svg)
+![Next.js](https://img.shields.io/badge/Next.js-14-black.svg)
+
 A production-ready, multi-service system for collecting IoT device metrics, performing real-time anomaly detection, and visualizing data through a modern web dashboard.
 
 ## Architecture
 
+### System Overview
+
+```mermaid
+graph TB
+    subgraph "Edge Layer"
+        A[C++ Agent<br/>Raspberry Pi Simulator]
+    end
+    
+    subgraph "Backend Services"
+        B[Express API<br/>Node.js + TypeScript]
+        C[Anomaly Detection<br/>Isolation Forest / Z-Score]
+        D[Socket.IO<br/>Real-time Events]
+    end
+    
+    subgraph "Data Layer"
+        E[(PostgreSQL<br/>Prisma ORM)]
+    end
+    
+    subgraph "Frontend"
+        F[Next.js Dashboard<br/>React + Tailwind]
+    end
+    
+    A -->|HTTP POST<br/>/api/ingest| B
+    B --> C
+    B --> E
+    C --> D
+    D -->|WebSocket| F
+    B -->|REST API| F
+    E --> B
 ```
-┌─────────────┐      HTTP POST       ┌──────────────┐
-│  C++ Agent  │─────────────────────>│   Backend    │
-│ (Simulator) │                      │  (Express)   │
-└─────────────┘                      └──────┬───────┘
-                                             │
-                                             │ Socket.IO
-                                             │
-                                    ┌────────▼────────┐
-                                    │   PostgreSQL    │
-                                    │   (Prisma ORM)  │
-                                    └────────┬────────┘
-                                             │
-                                             │ REST API
-                                             │
-                                    ┌────────▼────────┐
-                                    │   Dashboard    │
-                                    │   (Next.js)    │
-                                    └────────────────┘
+
+### Data Flow Diagram
+
+```mermaid
+sequenceDiagram
+    participant Agent as C++ Agent
+    participant API as Express API
+    participant DB as PostgreSQL
+    participant Engine as Anomaly Engine
+    participant Socket as Socket.IO
+    participant Dashboard as Next.js Dashboard
+    
+    loop Every Interval
+        Agent->>API: POST /api/ingest<br/>{metrics: [...]}
+        API->>DB: Store metrics
+        API->>Engine: Score batch
+        Engine->>Engine: Detect anomalies
+        Engine->>DB: Store anomalies
+        API->>Socket: Emit metric:new
+        API->>Socket: Emit anomaly:new
+        Socket->>Dashboard: Real-time update
+        Dashboard->>Dashboard: Update charts
+    end
+    
+    Dashboard->>API: GET /api/metrics
+    API->>DB: Query metrics
+    DB->>API: Return data
+    API->>Dashboard: JSON response
+```
+
+### Deployment Architecture
+
+```mermaid
+graph LR
+    subgraph "Docker Compose"
+        subgraph "Network: iot-network"
+            DB[(PostgreSQL:5432)]
+            BACKEND[Backend:8080]
+            DASHBOARD[Dashboard:3000]
+        end
+    end
+    
+    subgraph "Host Machine"
+        AGENT[C++ Agent<br/>make run-agent]
+    end
+    
+    AGENT -.->|HTTP| BACKEND
+    BACKEND <--> DB
+    BACKEND <-->|Socket.IO| DASHBOARD
+    BACKEND -->|REST API| DASHBOARD
+    
+    style DB fill:#336791
+    style BACKEND fill:#68a063
+    style DASHBOARD fill:#000000
+    style AGENT fill:#00599c
 ```
 
 ### Data Flow
@@ -63,10 +138,129 @@ This will:
 In a new terminal:
 
 ```bash
+# Standard agent with local analytics (z-score)
 make run-agent
+
+# Vibration sensor module with FFT-based anomaly detection
+make run-vibration
 ```
 
 The agent will start streaming metrics. Open http://localhost:3000 to see the dashboard update in real-time.
+
+### Example Agent Output
+
+```bash
+$ make run-agent
+
+IoT Edge Agent - Starting...
+Configuration:
+  Device ID: sim-device-001
+  API URL: http://localhost:8080
+  Interval: 1000 ms
+  Anomaly Probability: 0.05
+  Local Analytics: Enabled (window=200, z-threshold=3.0)
+Starting metric collection loop...
+[2024-01-01T12:00:00.123Z] Temp: 22.45°C (z=0.85), Vib: 0.021g (z=0.42), Hum: 45.12%, Volt: 4.91V
+[2024-01-01T12:00:01.234Z] Temp: 22.67°C (z=1.12), Vib: 0.019g (z=0.38), Hum: 45.34%, Volt: 4.90V
+[ANOMALY] Temperature spike detected!
+[2024-01-01T12:00:02.345Z] Temp: 30.52°C (z=4.23), Vib: 0.022g (z=0.45), Hum: 45.21%, Volt: 4.91V [LOCAL ANOMALY TEMP]
+```
+
+### Example Vibration Sensor Output
+
+```bash
+$ make run-vibration
+
+IoT Vibration Sensor Module - Starting...
+Features: FFT-based anomaly detection + Local analytics
+Configuration:
+  Device ID: sim-device-001
+  API URL: http://localhost:8080
+  Interval: 1000 ms
+Starting vibration monitoring loop...
+FFT window: 256 samples, Local analytics window: 200 samples
+[2024-01-01T12:00:00.123Z] Vib: 0.0214g, Z-score: 1.23, Mean: 0.0201, StdDev: 0.0012
+  [FFT] Dominant freq: 30.00 Hz, Total power: 45.23
+[FFT ANOMALY] High-frequency resonance detected!
+[2024-01-01T12:00:01.234Z] Vib: 0.5234g, Z-score: 4.56, Mean: 0.0201, StdDev: 0.0012 [LOCAL ANOMALY VIB]
+  [FFT] Dominant freq: 150.00 Hz, Total power: 234.56
+```
+
+### Example Docker Compose Startup
+
+```bash
+$ cd infra && docker compose up --build
+
+[+] Building 45.2s
+[+] Running 4/4
+ [OK] Container iot-postgres    Started
+ [OK] Container iot-backend      Started  
+ [OK] Container iot-dashboard    Started
+
+iot-backend  | Waiting for database...
+iot-backend  | Generated Prisma Client
+iot-backend  | Migrations applied
+iot-backend  | Seeding database...
+iot-backend  | Server started successfully!
+iot-backend  |    API: http://localhost:8080
+iot-backend  |    Engine: isoforest
+
+iot-dashboard |  Next.js 14.2.33
+iot-dashboard | - Local:        http://localhost:3000
+iot-dashboard | [OK] Ready in 2.3s
+```
+
+### Example API Response
+
+```bash
+$ curl http://localhost:8080/api/health
+
+{
+  "status": "ok",
+  "timestamp": "2024-01-01T12:00:00.000Z",
+  "database": {
+    "connected": true,
+    "stats": {
+      "devices": 3,
+      "metrics": 1523,
+      "anomalies": 12
+    }
+  },
+  "anomalyEngine": "isoforest"
+}
+```
+
+## Features
+
+### Real-Time Metrics Collection
+- **C++ Edge Agent**: Lightweight simulator for Raspberry Pi-like devices
+- **Configurable Intervals**: Adjustable collection frequency with jitter
+- **Multiple Metrics**: Temperature, vibration, humidity, and voltage monitoring
+- **Anomaly Injection**: Built-in capability to inject anomalies for testing
+- **Edge-Side Analytics**: Local z-score detection reduces backend load
+- **FFT Vibration Analysis**: Specialized vibration sensor with frequency-domain anomaly detection
+
+### Anomaly Detection
+- **Edge-Side**: Local analytics (z-score) in C++ agent for immediate detection
+- **FFT Analysis**: Frequency-domain analysis for vibration anomalies (resonances, harmonics)
+- **Backend Engines**: Switch between Isolation Forest and Z-Score algorithms
+- **Real-Time Processing**: Anomalies detected at edge and backend as metrics arrive
+- **Configurable Thresholds**: Adjustable sensitivity and window sizes
+- **Per-Device Models**: Separate anomaly detection models per device
+
+### Real-Time Dashboard
+- **Live Updates**: Socket.IO-powered real-time metric visualization
+- **Interactive Charts**: Time-series charts with Recharts
+- **Device Management**: View and filter devices with detailed metrics
+- **Anomaly Alerts**: Visual indicators for detected anomalies
+- **Time Range Selection**: View metrics for different time periods (15m, 1h, 24h, 7d)
+
+### Production Ready
+- **Docker Compose**: One-command deployment
+- **Health Checks**: Built-in health monitoring for all services
+- **Database Migrations**: Automatic Prisma migrations on startup
+- **CI/CD**: GitHub Actions workflow for automated testing
+- **Comprehensive Testing**: Unit tests for backend and dashboard
 
 ## Project Structure
 
@@ -74,10 +268,16 @@ The agent will start streaming metrics. Open http://localhost:3000 to see the da
 edge-iot-anomaly-agent/
 ├── agent-cpp/          # C++17 IoT simulator
 │   ├── CMakeLists.txt
+│   ├── include/
+│   │   ├── local_analytics.hpp  # Edge-side z-score analytics
+│   │   ├── fft_analyzer.hpp     # FFT-based vibration analysis
+│   │   ├── http_client.hpp
+│   │   └── config.hpp
 │   ├── src/
-│   │   ├── main.cpp
-│   │   ├── http_client.hpp/cpp
-│   │   └── config.hpp/cpp
+│   │   ├── main.cpp              # Main agent (with local analytics)
+│   │   ├── vibration_sensor.cpp  # Vibration sensor (with FFT)
+│   │   ├── http_client.cpp
+│   │   └── config.cpp
 │   └── config/
 │       └── agent.json
 ├── backend/            # Node.js + Express + Prisma
@@ -193,9 +393,47 @@ GET /api/anomalies?deviceId=sim-device-001&from=2024-01-01T00:00:00Z&type=isofor
 GET /api/health
 ```
 
-## Anomaly Detection
+## Edge-Side Analytics (C++)
 
-The system supports two anomaly detection engines:
+The C++ agents include lightweight local analytics for edge-side anomaly detection:
+
+### Local Analytics Module (`local_analytics.hpp`)
+
+- **Running Statistics**: Maintains rolling window (default: 200 samples) for mean and standard deviation
+- **Z-Score Detection**: Flags anomalies when |z-score| > threshold (default: 3.0)
+- **Per-Metric Tracking**: Separate statistics for temperature, vibration, humidity, and voltage
+- **Low Overhead**: O(1) update time, minimal memory footprint
+
+**Usage in Main Agent:**
+The standard agent (`make run-agent`) uses local analytics to detect anomalies before sending to backend:
+- Real-time z-score calculation for each metric
+- Local anomaly flags displayed in console output
+- Reduces backend processing load
+
+### FFT-Based Vibration Analyzer (`fft_analyzer.hpp`)
+
+- **Frequency Domain Analysis**: Cooley-Tukey FFT implementation for vibration signals
+- **Anomaly Detection**: Identifies unusual frequency patterns, resonances, and power spikes
+- **Dominant Frequency**: Tracks primary vibration frequency (e.g., motor RPM)
+- **Power Analysis**: Detects excessive vibration energy
+
+**Usage in Vibration Sensor:**
+The vibration sensor module (`make run-vibration`) combines:
+- FFT analysis for frequency-domain anomalies (high-frequency resonances, unusual harmonics)
+- Local analytics for amplitude-based anomalies (z-score on vibration magnitude)
+- Specialized vibration signal generation with harmonics and anomalies
+
+**Example Output:**
+```bash
+[2024-01-01T12:00:00.123Z] Vib: 0.0214g, Z-score: 1.23, Mean: 0.0201, StdDev: 0.0012
+  [FFT] Dominant freq: 30.00 Hz, Total power: 45.23
+[FFT ANOMALY] High-frequency resonance detected!
+[2024-01-01T12:00:01.234Z] Vib: 0.5234g, Z-score: 4.56, Mean: 0.0201, StdDev: 0.0012 [LOCAL ANOMALY VIB]
+```
+
+## Backend Anomaly Detection
+
+The backend supports two anomaly detection engines:
 
 ### Isolation Forest (`isoforest`)
 
@@ -259,8 +497,18 @@ cd agent-cpp
 mkdir -p build && cd build
 cmake ..
 make
+
+# Run main agent (with local analytics)
 ./agent
+
+# Run vibration sensor module (with FFT analysis)
+./vibration_sensor
 ```
+
+**Building Both Executables:**
+The CMake build system creates two executables:
+- `agent`: Main IoT agent with local z-score analytics
+- `vibration_sensor`: Specialized vibration sensor with FFT-based anomaly detection
 
 ## Testing
 

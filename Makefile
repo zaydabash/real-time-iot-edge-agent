@@ -11,7 +11,8 @@ help:
 	@echo "  build        - Build all services"
 	@echo "  db-migrate   - Run Prisma migrations"
 	@echo "  db-seed      - Seed database with demo devices"
-	@echo "  run-agent    - Build and run C++ agent simulator"
+	@echo "  run-agent    - Build and run C++ agent simulator (with local analytics)"
+	@echo "  run-vibration - Build and run vibration sensor module (with FFT analysis)"
 	@echo "  lint         - Lint all services"
 	@echo "  test         - Run tests across all services"
 	@echo "  format       - Format code across services"
@@ -34,8 +35,12 @@ dev:
 	cd infra && docker compose up --build
 
 run-agent:
-	@echo "Building and running C++ agent..."
+	@echo "Building and running C++ agent (with local analytics)..."
 	cd agent-cpp && mkdir -p build && cd build && cmake .. && make && ./agent
+
+run-vibration:
+	@echo "Building and running vibration sensor module (with FFT analysis)..."
+	cd agent-cpp && mkdir -p build && cd build && cmake .. && make && ./vibration_sensor
 
 build:
 	@echo "Building backend..."
