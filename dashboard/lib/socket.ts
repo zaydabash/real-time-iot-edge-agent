@@ -25,3 +25,11 @@ export function disconnectSocket(): void {
   }
 }
 
+// React hook for using socket
+export function useSocket() {
+  if (typeof window === 'undefined') {
+    return { socket: null };
+  }
+  return { socket: getSocket() };
+}
+

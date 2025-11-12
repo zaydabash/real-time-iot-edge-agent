@@ -13,6 +13,9 @@ help:
 	@echo "  db-seed      - Seed database with demo devices"
 	@echo "  run-agent    - Build and run C++ agent simulator (with local analytics)"
 	@echo "  run-vibration - Build and run vibration sensor module (with FFT analysis)"
+	@echo "  run-agent-c  - Build and run C MQTT client (EdgeFlow mode)"
+	@echo "  dev-mqtt     - Start stack with MQTT + Python ML enabled"
+	@echo "  bench-ingest - Benchmark MQTT ingestion (if available)"
 	@echo "  lint         - Lint all services"
 	@echo "  test         - Run tests across all services"
 	@echo "  format       - Format code across services"
@@ -41,6 +44,18 @@ run-agent:
 run-vibration:
 	@echo "Building and running vibration sensor module (with FFT analysis)..."
 	cd agent-cpp && mkdir -p build && cd build && cmake .. && make && ./vibration_sensor
+
+run-agent-c:
+	@echo "Building and running C MQTT client..."
+	cd agent-c && mkdir -p build && cd build && cmake .. && make && ./agent-c
+
+dev-mqtt:
+	@echo "Starting stack with MQTT + Python ML enabled..."
+	cd infra && MQTT_ENABLE=true PY_ML_ENABLE=true docker compose up --build
+
+bench-ingest:
+	@echo "MQTT benchmark tool not yet implemented"
+	@echo "To manually test, run: make run-agent-c"
 
 build:
 	@echo "Building backend..."

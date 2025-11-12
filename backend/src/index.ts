@@ -8,7 +8,8 @@ import express from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
 import { PrismaClient } from '@prisma/client';
-import { initializeSocketIO } from './realtime';
+import { initializeSocketIO, getIOServer } from './realtime';
+import { initializeMQTTBridge } from './mqtt/bridge';
 import { logger } from './utils/logger';
 import ingestRouter from './routes/ingest';
 import devicesRouter from './routes/devices';
@@ -78,13 +79,32 @@ async function startServer() {
       }
     }
 
-    httpServer.listen(PORT, () => {
+    httpServer.listen(PORT, async () => {
       logger.info(`Server running on port ${PORT}`);
       logger.info(`API available on port ${PORT}`);
       logger.info(`Anomaly engine: ${process.env.ANOMALY_ENGINE || 'isoforest'}`);
+      
+      // Initialize MQTT bridge if enabled
+      const socketIO = getIOServer();
+      if (socketIO) {
+        try {
+          await initializeMQTTBridge(prisma, socketIO);
+        } catch (error) {
+          logger.error('Failed to initialize MQTT bridge:', error);
+          // Don't fail startup if MQTT fails
+        }
+      }
+      
       console.log(`\nServer started successfully!`);
       console.log(`   API: http://localhost:${PORT} (internal)`);
-      console.log(`   Engine: ${process.env.ANOMALY_ENGINE || 'isoforest'}\n`);
+      console.log(`   Engine: ${process.env.ANOMALY_ENGINE || 'isoforest'}`);
+      if (process.env.MQTT_ENABLE === 'true') {
+        console.log(`   MQTT: Enabled`);
+      }
+      if (process.env.PY_ML_ENABLE === 'true') {
+        console.log(`   Python ML: Enabled`);
+      }
+      console.log();
     });
   } catch (error) {
     logger.error('Failed to start server:', error);
