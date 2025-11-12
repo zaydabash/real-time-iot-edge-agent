@@ -9,6 +9,7 @@ export interface Device {
   name: string;
   location: string | null;
   createdAt: string;
+  lastAnomaly?: boolean;
   _count?: {
     metrics: number;
     anomalies: number;

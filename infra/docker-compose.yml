@@ -20,6 +20,44 @@ services:
     networks:
       - iot-network
 
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: iot-mosquitto
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 1 mosquitto_sub -h localhost -t test -C 1 || exit 0"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - iot-network
+
+  ml-service:
+    build:
+      context: ../ml-service
+      dockerfile: Dockerfile
+    container_name: iot-ml-service
+    environment:
+      ISOFOREST_WINDOW: ${ISOFOREST_WINDOW:-512}
+      ISOFOREST_CONTAM: ${ISOFOREST_CONTAM:-0.03}
+      ISOFOREST_THRESHOLD: ${ISOFOREST_THRESHOLD:-0.65}
+      WARM_START: ${WARM_START:-true}
+      PORT: 8000
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - iot-network
+
   backend:
     build:
       context: ../backend
@@ -34,10 +72,20 @@ services:
       ANOMALY_THRESHOLD_PERCENTILE: ${ANOMALY_THRESHOLD_PERCENTILE:-95}
       ALLOW_AUTO_DEVICE: ${ALLOW_AUTO_DEVICE:-true}
       SOCKET_IO_CORS: ${SOCKET_IO_CORS:-*}
+      MQTT_ENABLE: ${MQTT_ENABLE:-false}
+      MQTT_BROKER_URL: ${MQTT_BROKER_URL:-mqtt://mosquitto:1883}
+      MQTT_BATCH_SIZE: ${MQTT_BATCH_SIZE:-64}
+      PY_ML_ENABLE: ${PY_ML_ENABLE:-false}
+      PY_ML_URL: ${PY_ML_URL:-http://ml-service:8000}
+      PY_ML_TIMEOUT: ${PY_ML_TIMEOUT:-5000}
     ports:
       - "8080:8080"
     depends_on:
       db:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
+      ml-service:
         condition: service_healthy
     command: >
       sh -c "

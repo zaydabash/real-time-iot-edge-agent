@@ -7,9 +7,11 @@ import { fetchDevice, fetchMetrics, Device, Metric } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import LiveStatus from '@/components/LiveStatus';
 import MetricChart from '@/components/MetricChart';
+import PlotlyChart from '@/components/PlotlyChart';
 import { subMinutes, subHours, subDays } from 'date-fns';
 
 type TimeRange = '15m' | '1h' | '24h' | '7d';
+type ChartEngine = 'recharts' | 'plotly';
 
 export default function DeviceDetailPage() {
   const params = useParams();
@@ -18,6 +20,13 @@ export default function DeviceDetailPage() {
   const [device, setDevice] = useState<Device | null>(null);
   const [metrics, setMetrics] = useState<Metric[]>([]);
   const [timeRange, setTimeRange] = useState<TimeRange>('1h');
+  const [chartEngine, setChartEngine] = useState<ChartEngine>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('chartEngine');
+      return (saved === 'plotly' || saved === 'recharts') ? saved : 'recharts';
+    }
+    return 'recharts';
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -115,71 +124,122 @@ export default function DeviceDetailPage() {
           <LiveStatus />
         </div>
 
-        {/* Time Range Selector */}
-        <div className="mb-6 flex gap-2">
-          {(['15m', '1h', '24h', '7d'] as TimeRange[]).map((range) => (
+        {/* Time Range Selector & Chart Engine Toggle */}
+        <div className="mb-6 flex gap-2 items-center justify-between">
+          <div className="flex gap-2">
+            {(['15m', '1h', '24h', '7d'] as TimeRange[]).map((range) => (
+              <button
+                key={range}
+                onClick={() => {
+                  setTimeRange(range);
+                  setLoading(true);
+                  loadMetrics();
+                }}
+                className={`px-4 py-2 rounded ${
+                  timeRange === range
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                {range}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2 items-center">
+            <span className="text-sm text-gray-600">Chart Engine:</span>
             <button
-              key={range}
               onClick={() => {
-                setTimeRange(range);
-                setLoading(true);
-                loadMetrics();
+                const newEngine: ChartEngine = chartEngine === 'recharts' ? 'plotly' : 'recharts';
+                setChartEngine(newEngine);
+                localStorage.setItem('chartEngine', newEngine);
               }}
-              className={`px-4 py-2 rounded ${
-                timeRange === range
-                  ? 'bg-blue-600 text-white'
+              className={`px-4 py-2 rounded text-sm ${
+                chartEngine === 'plotly'
+                  ? 'bg-purple-600 text-white'
                   : 'bg-white text-gray-700 hover:bg-gray-100'
               }`}
             >
-              {range}
+              {chartEngine === 'recharts' ? 'Switch to Plotly' : 'Switch to Recharts'}
             </button>
-          ))}
+          </div>
         </div>
 
         {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Temperature</h2>
-            <MetricChart
-              metrics={metrics}
-              metricKey="temperature_c"
-              label="Temperature"
-              unit="°C"
-              color="#ef4444"
-            />
+            {chartEngine === 'recharts' ? (
+              <MetricChart
+                metrics={metrics}
+                metricKey="temperature_c"
+                label="Temperature"
+                unit="°C"
+                color="#ef4444"
+              />
+            ) : (
+              <PlotlyChart
+                data={metrics}
+                metricType="temperature_c"
+                title="Temperature (°C)"
+              />
+            )}
           </div>
 
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Vibration</h2>
-            <MetricChart
-              metrics={metrics}
-              metricKey="vibration_g"
-              label="Vibration"
-              unit="g"
-              color="#f59e0b"
-            />
+            {chartEngine === 'recharts' ? (
+              <MetricChart
+                metrics={metrics}
+                metricKey="vibration_g"
+                label="Vibration"
+                unit="g"
+                color="#f59e0b"
+              />
+            ) : (
+              <PlotlyChart
+                data={metrics}
+                metricType="vibration_g"
+                title="Vibration (g)"
+              />
+            )}
           </div>
 
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Humidity</h2>
-            <MetricChart
-              metrics={metrics}
-              metricKey="humidity_pct"
-              label="Humidity"
-              unit="%"
-              color="#3b82f6"
-            />
+            {chartEngine === 'recharts' ? (
+              <MetricChart
+                metrics={metrics}
+                metricKey="humidity_pct"
+                label="Humidity"
+                unit="%"
+                color="#3b82f6"
+              />
+            ) : (
+              <PlotlyChart
+                data={metrics}
+                metricType="humidity_pct"
+                title="Humidity (%)"
+              />
+            )}
           </div>
 
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Voltage</h2>
-            <MetricChart
-              metrics={metrics}
-              metricKey="voltage_v"
-              label="Voltage"
-              unit="V"
-              color="#10b981"
-            />
+            {chartEngine === 'recharts' ? (
+              <MetricChart
+                metrics={metrics}
+                metricKey="voltage_v"
+                label="Voltage"
+                unit="V"
+                color="#10b981"
+              />
+            ) : (
+              <PlotlyChart
+                data={metrics}
+                metricType="voltage_v"
+                title="Voltage (V)"
+              />
+            )}
           </div>
         </div>
       </div>

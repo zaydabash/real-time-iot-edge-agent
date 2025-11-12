@@ -12,6 +12,9 @@
     "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css}\""
   },
   "dependencies": {
+    "maplibre-gl": "^3.6.2",
+    "plotly.js": "^2.27.1",
+    "react-plotly.js": "^2.6.0",
     "next": "^14.0.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

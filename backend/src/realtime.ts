@@ -100,3 +100,7 @@ export function getIO(): SocketIOServer | null {
   return io;
 }
 
+export function getIOServer(): SocketIOServer | null {
+  return io;
+}
+
