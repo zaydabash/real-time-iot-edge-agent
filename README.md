@@ -1,6 +1,6 @@
 # Real-Time C++ Edge Agent for IoT Metrics
 
-![Build Status](https://img.shields.io/github/actions/workflow/status/YOUR_USERNAME/real-time-iot-edge-agent/ci.yml?branch=main)
+![Build Status](https://img.shields.io/github/actions/workflow/status/zaydabash/real-time-iot-edge-agent/ci.yml?branch=main)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Node](https://img.shields.io/badge/node-20+-green.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)
