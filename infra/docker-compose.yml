@@ -1,0 +1,104 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: iot-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: iot
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - iot-network
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: iot-backend
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/iot
+      PORT: 8080
+      NODE_ENV: production
+      ANOMALY_ENGINE: ${ANOMALY_ENGINE:-isoforest}
+      ANOMALY_WINDOW_SIZE: ${ANOMALY_WINDOW_SIZE:-512}
+      ANOMALY_THRESHOLD_PERCENTILE: ${ANOMALY_THRESHOLD_PERCENTILE:-95}
+      ALLOW_AUTO_DEVICE: ${ALLOW_AUTO_DEVICE:-true}
+      SOCKET_IO_CORS: ${SOCKET_IO_CORS:-*}
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "
+        echo 'Waiting for database...' &&
+        sleep 10 &&
+        npx prisma generate &&
+        npx prisma db push --accept-data-loss || true &&
+        (npm run seed || echo 'Seed skipped') &&
+        npm start
+      "
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8080/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - iot-network
+
+  dashboard:
+    build:
+      context: ../dashboard
+      dockerfile: Dockerfile
+    container_name: iot-dashboard
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_BACKEND_URL: http://localhost:8080
+      NEXT_PUBLIC_SOCKET_URL: http://localhost:8080
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - iot-network
+
+  # Optional: pgAdmin (disabled by default)
+  # Uncomment to enable:
+  # pgadmin:
+  #   image: dpage/pgadmin4:latest
+  #   container_name: iot-pgadmin
+  #   environment:
+  #     PGADMIN_DEFAULT_EMAIL: admin@iot.local
+  #     PGADMIN_DEFAULT_PASSWORD: admin
+  #   ports:
+  #     - "5050:80"
+  #   depends_on:
+  #     - db
+  #   networks:
+  #     - iot-network
+
+volumes:
+  postgres_data:
+
+networks:
+  iot-network:
+    driver: bridge
+
