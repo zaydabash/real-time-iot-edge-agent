@@ -79,3 +79,56 @@ jobs:
           test -f agent && echo "[OK] agent executable built successfully"
           test -f vibration_sensor && echo "[OK] vibration_sensor executable built successfully"
 
+  e2e:
+    name: End-to-end smoke test (Docker stack)
+    runs-on: ubuntu-latest
+    needs: [backend, dashboard, agent]
+    defaults:
+      run:
+        working-directory: ./infra
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start Docker stack (HTTP pipeline)
+      # Use the same compose file as local dev; MQTT/Python ML flags use defaults (HTTP-only path)
+        run: |
+          docker compose up -d --build
+
+      - name: Wait for backend health
+        run: |
+          set -e
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8080/api/health > /dev/null; then
+              echo "Backend is healthy"
+              exit 0
+            fi
+            echo "Waiting for backend health... ($i/30)"
+            sleep 5
+          done
+          echo "Backend failed to become healthy"
+          docker compose logs backend || true
+          exit 1
+
+      - name: Ingest sample metrics
+        run: |
+          set -e
+          curl -sf -X POST http://localhost:8080/api/ingest \
+            -H "Content-Type: application/json" \
+            -d '{
+              "deviceId": "ci-device-001",
+              "metrics": [
+                {
+                  "temperature_c": 22.5,
+                  "vibration_g": 0.02,
+                  "humidity_pct": 45.0,
+                  "voltage_v": 3.3
+                }
+              ]
+            }' > /dev/null
+          echo "Ingest request succeeded"
+
+      - name: Tear down Docker stack
+        if: always()
+        run: |
+          docker compose down -v || true
+
