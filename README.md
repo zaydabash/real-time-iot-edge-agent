@@ -158,16 +158,19 @@ EdgeFlow extends the system with an MQTT ingest path, a C/C++ sensor client, and
 
 ### TL;DR Quickstart
 
+If you just want one **reliable path** end-to-end, follow the HTTP pipeline in `QUICKSTART.md`.  
+The commands below are for the **MQTT + Python ML EdgeFlow** mode.
+
 ```bash
 # 0) From repo root
 cp backend/.env.example backend/.env
 cp ml-service/.env.example ml-service/.env
 
 # 1) Bring up the full stack with MQTT + Python ML enabled
-MQTT_ENABLE=true PY_ML_ENABLE=true docker compose up --build
+make dev-mqtt     # wraps: MQTT_ENABLE=true PY_ML_ENABLE=true cd infra && docker compose up --build
 
 # 2) (New) Run the C MQTT agent
-make run-agent-c   # publishes to sensors/<deviceId>/metrics via mosquitto
+make run-agent-c  # publishes to sensors/<deviceId>/metrics via mosquitto
 
 # 3) Visit the app
 # Dashboard: http://your-dashboard-url:3000
@@ -175,11 +178,12 @@ make run-agent-c   # publishes to sensors/<deviceId>/metrics via mosquitto
 # Python ML health: http://your-backend-url:8000/health
 ```
 
-**Want the original pipeline only?** Run without toggles:
+**Want the original HTTP pipeline only?** Use:
 
 ```bash
-docker compose up --build        # HTTP ingest + Node z-score only
-make run-agent                   # existing C++ HTTP agent
+# From repo root
+make dev          # starts db + backend + dashboard via docker compose
+make run-agent    # existing C++ HTTP agent
 ```
 
 ### What's Included
