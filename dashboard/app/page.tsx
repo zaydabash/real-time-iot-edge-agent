@@ -12,43 +12,12 @@ export default function Home() {
   const [anomalies24h, setAnomalies24h] = useState<Anomaly[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadData();
-
-    const socket = getSocket();
-
-    const onMetricNew = () => {
-      loadData();
-    };
-
-    const onAnomalyNew = () => {
-      loadAnomalies();
-    };
-
-    socket.on('metric:new', onMetricNew);
-    socket.on('anomaly:new', onAnomalyNew);
-
-    return () => {
-      socket.off('metric:new', onMetricNew);
-      socket.off('anomaly:new', onAnomalyNew);
-    };
-  }, []);
-
-  const loadData = async () => {
+  const loadDevices = async () => {
     try {
-      const [devicesData, anomaliesData] = await Promise.all([
-        fetchDevices(),
-        fetchAnomalies({
-          from: subHours(new Date(), 24).toISOString(),
-          limit: 100,
-        }),
-      ]);
-      setDevices(devicesData);
-      setAnomalies24h(anomaliesData);
+      const data = await fetchDevices();
+      setDevices(data);
     } catch (error) {
-      console.error('Failed to load data:', error);
-    } finally {
-      setLoading(false);
+      console.error('Failed to load devices:', error);
     }
   };
 
@@ -63,6 +32,77 @@ export default function Home() {
       console.error('Failed to load anomalies:', error);
     }
   };
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      await Promise.all([loadDevices(), loadAnomalies()]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+
+    const socket = getSocket();
+
+    const onMetricNew = (data: { deviceId: string; metric: any }) => {
+      setDevices((prev) => {
+        const exists = prev.some((d) => d.id === data.deviceId);
+        if (!exists) {
+          // New device discovered, re-fetch list once
+          loadDevices();
+          return prev;
+        }
+        return prev.map((d) => {
+          if (d.id === data.deviceId) {
+            return {
+              ...d,
+              _count: {
+                ...d._count,
+                metrics: (d._count?.metrics || 0) + 1,
+                anomalies: d._count?.anomalies || 0,
+              },
+            };
+          }
+          return d;
+        });
+      });
+    };
+
+    const onAnomalyNew = (data: { deviceId: string; anomaly: any }) => {
+      setAnomalies24h((prev) => {
+        // Add to recent list if not already there (idempotency)
+        if (prev.some((a) => a.id === data.anomaly.id)) return prev;
+        return [data.anomaly, ...prev].slice(0, 100);
+      });
+
+      setDevices((prev) =>
+        prev.map((d) => {
+          if (d.id === data.deviceId) {
+            return {
+              ...d,
+              lastAnomaly: true,
+              _count: {
+                ...d._count!,
+                anomalies: (d._count?.anomalies || 0) + 1,
+              },
+            };
+          }
+          return d;
+        })
+      );
+    };
+
+    socket.on('metric:new', onMetricNew);
+    socket.on('anomaly:new', onAnomalyNew);
+
+    return () => {
+      socket.off('metric:new', onMetricNew);
+      socket.off('anomaly:new', onAnomalyNew);
+    };
+  }, []);
 
   const totalMetrics = devices.reduce((sum, d) => sum + (d._count?.metrics || 0), 0);
 

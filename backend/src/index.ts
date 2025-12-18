@@ -10,6 +10,7 @@ import { createServer } from 'http';
 import { PrismaClient } from '@prisma/client';
 import { initializeSocketIO, getIOServer } from './realtime';
 import { initializeMQTTBridge } from './mqtt/bridge';
+import { initializeJobs } from './jobs/cleanup';
 import { logger } from './utils/logger';
 import ingestRouter from './routes/ingest';
 import devicesRouter from './routes/devices';
@@ -82,8 +83,11 @@ async function startServer() {
     httpServer.listen(PORT, async () => {
       logger.info(`Server running on port ${PORT}`);
       logger.info(`API available on port ${PORT}`);
-      logger.info(`Anomaly engine: ${process.env.ANOMALY_ENGINE || 'isoforest'}`);
-      
+      logger.info(`Anomaly engine: ${process.env.ANOMALY_ENGINE || 'median-deviation'}`);
+
+      // Initialize background jobs
+      initializeJobs();
+
       // Initialize MQTT bridge if enabled
       const socketIO = getIOServer();
       if (socketIO) {
@@ -94,10 +98,10 @@ async function startServer() {
           // Don't fail startup if MQTT fails
         }
       }
-      
+
       console.log(`\nServer started successfully!`);
       console.log(`   API: http://localhost:${PORT} (internal)`);
-      console.log(`   Engine: ${process.env.ANOMALY_ENGINE || 'isoforest'}`);
+      console.log(`   Engine: ${process.env.ANOMALY_ENGINE || 'median-deviation'}`);
       if (process.env.MQTT_ENABLE === 'true') {
         console.log(`   MQTT: Enabled`);
       }

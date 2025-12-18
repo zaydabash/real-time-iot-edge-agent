@@ -4,7 +4,7 @@ FastAPI service for Isolation Forest anomaly detection
 
 import os
 import pickle
-from typing import List, Optional
+from typing import List, Optional, Dict
 from datetime import datetime
 import numpy as np
 from fastapi import FastAPI, HTTPException
@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler
 import logging
+from pathlib import Path
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -22,12 +23,18 @@ app = FastAPI(title="IoT Anomaly Detection ML Service")
 ISOFOREST_WINDOW = int(os.getenv("ISOFOREST_WINDOW", "512"))
 ISOFOREST_CONTAM = float(os.getenv("ISOFOREST_CONTAM", "0.03"))
 ISOFOREST_THRESHOLD = float(os.getenv("ISOFOREST_THRESHOLD", "0.65"))
-WARM_START = os.getenv("WARM_START", "true").lower() == "true"
+MODEL_DIR = os.getenv("MODEL_DIR", "./models")
+# How many new points before we re-train?
+RETRAIN_INTERVAL = int(os.getenv("RETRAIN_INTERVAL", "100"))
 
-# Per-device models storage
-models: dict[str, IsolationForest] = {}
-scalers: dict[str, StandardScaler] = {}
-device_windows: dict[str, List[dict]] = {}
+# Create model directory
+Path(MODEL_DIR).mkdir(parents=True, exist_ok=True)
+
+# In-memory storage for active models
+models: Dict[str, IsolationForest] = {}
+scalers: Dict[str, StandardScaler] = {}
+device_windows: Dict[str, List[dict]] = {}
+points_since_train: Dict[str, int] = {}
 
 
 class MetricPoint(BaseModel):
@@ -66,17 +73,50 @@ def extract_features(points: List[MetricPoint]) -> np.ndarray:
     return np.array(features)
 
 
+def get_model_path(device_id: str) -> Path:
+    return Path(MODEL_DIR) / f"{device_id}.pkl"
+
+
+def save_model(device_id: str, model: IsolationForest, scaler: StandardScaler):
+    """Persist model and scaler to disk"""
+    try:
+        with open(get_model_path(device_id), "wb") as f:
+            pickle.dump({"model": model, "scaler": scaler}, f)
+    except Exception as e:
+        logger.error(f"Failed to save model for {device_id}: {e}")
+
+
+def load_model(device_id: str) -> Optional[tuple[IsolationForest, StandardScaler]]:
+    """Load model and scaler from disk if they exist"""
+    path = get_model_path(device_id)
+    if path.exists():
+        try:
+            with open(path, "rb") as f:
+                data = pickle.load(f)
+                return data["model"], data["scaler"]
+        except Exception as e:
+            logger.error(f"Failed to load model for {device_id}: {e}")
+    return None
+
+
 def get_or_create_model(device_id: str) -> tuple[IsolationForest, StandardScaler]:
-    """Get existing model or create new one for device"""
-    if device_id in models and WARM_START:
+    """Get existing model (memory or disk) or create new one"""
+    if device_id in models:
         return models[device_id], scalers[device_id]
     
-    # Create new model
+    # Try loading from disk
+    persisted = load_model(device_id)
+    if persisted:
+        model, scaler = persisted
+        models[device_id] = model
+        scalers[device_id] = scaler
+        return model, scaler
+
+    # Create new model if none exists
     model = IsolationForest(
         n_estimators=100,
         contamination=ISOFOREST_CONTAM,
-        random_state=42,
-        warm_start=WARM_START
+        random_state=42
     )
     scaler = StandardScaler()
     
@@ -98,12 +138,57 @@ def update_model_window(device_id: str, points: List[MetricPoint]):
     # Keep only last N points
     if len(window) > ISOFOREST_WINDOW:
         device_windows[device_id] = window[-ISOFOREST_WINDOW:]
+    
+    # Track growth for re-training trigger
+    points_since_train[device_id] = points_since_train.get(device_id, 0) + len(points)
 
 
 @app.get("/health")
 async def health():
     """Health check endpoint"""
-    return {"ok": True, "service": "ml-anomaly-detection"}
+    return {
+        "ok": True, 
+        "service": "ml-anomaly-detection",
+        "active_models": len(models),
+        "persisted_models": len(list(Path(MODEL_DIR).glob("*.pkl")))
+    }
+
+
+@app.get("/models")
+async def list_models():
+    """List all tracked devices and their status"""
+    all_device_ids = set(list(models.keys()) + [p.stem for p in Path(MODEL_DIR).glob("*.pkl")])
+    return {
+        "devices": [
+            {
+                "deviceId": d_id,
+                "inMemory": d_id in models,
+                "persisted": get_model_path(d_id).exists(),
+                "pointsSinceTrain": points_since_train.get(d_id, 0),
+                "windowSize": len(device_windows.get(d_id, []))
+            } 
+            for d_id in all_device_ids
+        ]
+    }
+
+
+@app.delete("/models/{device_id}")
+async def delete_model(device_id: str):
+    """Purge a model from memory and disk"""
+    models.pop(device_id, None)
+    scalers.pop(device_id, None)
+    device_windows.pop(device_id, None)
+    points_since_train.pop(device_id, None)
+    
+    path = get_model_path(device_id)
+    if path.exists():
+        try:
+            path.unlink()
+        except Exception as e:
+            logger.error(f"Failed to delete model file for {device_id}: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to delete model file: {e}")
+        
+    return {"success": True, "deviceId": device_id}
 
 
 @app.post("/score-batch", response_model=ScoreBatchResponse)
@@ -121,49 +206,53 @@ async def score_batch(request: ScoreBatchRequest):
         # Get or create model for device
         model, scaler = get_or_create_model(device_id)
         
-        # Extract features
-        features = extract_features(points)
-        
         # Update window
         update_model_window(device_id, points)
         
         # Get training window
         window = device_windows[device_id]
-        if len(window) < 10:
-            # Not enough data, return neutral scores
+        window_size = len(window)
+        
+        # Re-training trigger logic
+        is_trained = hasattr(model, 'offset_')
+        should_train = not is_trained and window_size >= 100
+        # Aggressive re-training for small windows, sparse for large
+        if is_trained and points_since_train.get(device_id, 0) >= RETRAIN_INTERVAL:
+            should_train = True
+
+        if should_train:
+            logger.info(f"Re-training model for device {device_id} (window size: {window_size})")
+            train_features = extract_features([MetricPoint(**p) for p in window])
+            train_scaled = scaler.fit_transform(train_features)
+            model.fit(train_scaled)
+            points_since_train[device_id] = 0
+            # Save progress
+            save_model(device_id, model, scaler)
+        
+        # Check if we have a trained model to use
+        if not hasattr(model, 'offset_'):
+            # Not enough data yet, return neutral scores
             scores = [ScoredPoint(index=i, score=0.5, isAnomaly=False) 
                      for i in range(len(points))]
             return ScoreBatchResponse(scores=scores)
         
-        # Prepare training data
-        train_features = extract_features([MetricPoint(**p) for p in window])
-        
-        # Fit scaler and model if needed
-        if not hasattr(model, 'estimators_') or len(model.estimators_) == 0:
-            train_scaled = scaler.fit_transform(train_features)
-            model.fit(train_scaled)
-        else:
-            # Partial fit if warm start enabled
-            train_scaled = scaler.transform(train_features)
-            if WARM_START and hasattr(model, 'partial_fit'):
-                try:
-                    model.partial_fit(train_scaled)
-                except:
-                    # Fallback to full fit
-                    model.fit(train_scaled)
-        
-        # Scale input features
+        # Score the batch (using the fitted model)
+        features = extract_features(points)
         input_scaled = scaler.transform(features)
         
-        # Predict anomalies (returns -1 for anomaly, 1 for normal)
+        # Predict returns -1 for anomaly, 1 for normal
         predictions = model.predict(input_scaled)
         
-        # Get anomaly scores (lower = more anomalous)
+        # Get scores (higher = more normal, but score_samples returns raw value)
+        # We normalize to [0, 1] where closer to 1 means more anomalous
         scores_raw = model.score_samples(input_scaled)
         
-        # Normalize scores to [0, 1] range (invert so higher = more anomalous)
-        scores_normalized = 1.0 / (1.0 + np.exp(-scores_raw))
-        
+        # Isolation Forest score_samples returns values. Lower means more anomalous.
+        # We invert so higher = more anomalous for consistent dashboard coloring.
+        # Shift so 1.0 is max anomaly, 0.0 is max normal.
+        # Isolation Forest scores typically range from -1.0 to 0.0 roughly.
+        scores_normalized = 1.0 / (1.0 + np.exp(scores_raw * 10)) # Sharper sigmoid
+
         # Build response
         scored_points = []
         for i, (pred, score) in enumerate(zip(predictions, scores_normalized)):
@@ -173,9 +262,6 @@ async def score_batch(request: ScoreBatchRequest):
                 score=float(score),
                 isAnomaly=bool(is_anomaly)
             ))
-        
-        logger.info(f"Scored {len(points)} points for device {device_id}: "
-                   f"{sum(1 for s in scored_points if s.isAnomaly)} anomalies")
         
         return ScoreBatchResponse(scores=scored_points)
         

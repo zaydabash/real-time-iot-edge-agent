@@ -95,12 +95,13 @@ public:
 
 private:
     /**
-     * Cooley-Tukey FFT implementation
+     * Iterative Radix-2 Cooley-Tukey FFT implementation
+     * Avoids recursion and minimizes allocations for edge performance.
      */
     std::vector<std::complex<double>> fft(const std::vector<double>& input) {
         size_t n = input.size();
         
-        // Pad to next power of 2 if needed
+        // Pad to next power of 2
         size_t n_padded = 1;
         while (n_padded < n) {
             n_padded <<= 1;
@@ -114,39 +115,36 @@ private:
             x[i] = std::complex<double>(0.0, 0.0);
         }
 
-        return fftRecursive(x);
-    }
+        // 1. Bit-reversal permutation
+        for (size_t i = 1, j = 0; i < n_padded; i++) {
+            size_t bit = n_padded >> 1;
+            for (; j & bit; bit >>= 1) {
+                j ^= bit;
+            }
+            j ^= bit;
 
-    std::vector<std::complex<double>> fftRecursive(const std::vector<std::complex<double>>& x) {
-        size_t n = x.size();
-        
-        if (n <= 1) {
-            return x;
+            if (i < j) {
+                std::swap(x[i], x[j]);
+            }
         }
 
-        // Divide
-        std::vector<std::complex<double>> even(n / 2);
-        std::vector<std::complex<double>> odd(n / 2);
-        
-        for (size_t i = 0; i < n / 2; ++i) {
-            even[i] = x[i * 2];
-            odd[i] = x[i * 2 + 1];
+        // 2. Iterative butterflies
+        for (size_t len = 2; len <= n_padded; len <<= 1) {
+            double ang = 2.0 * M_PI / len;
+            std::complex<double> wlen(std::cos(ang), -std::sin(ang));
+            for (size_t i = 0; i < n_padded; i += len) {
+                std::complex<double> w(1);
+                for (size_t j = 0; j < len / 2; j++) {
+                    std::complex<double> u = x[i + j];
+                    std::complex<double> v = x[i + j + len / 2] * w;
+                    x[i + j] = u + v;
+                    x[i + j + len / 2] = u - v;
+                    w *= wlen;
+                }
+            }
         }
 
-        // Conquer
-        std::vector<std::complex<double>> even_fft = fftRecursive(even);
-        std::vector<std::complex<double>> odd_fft = fftRecursive(odd);
-
-        // Combine
-        std::vector<std::complex<double>> result(n);
-        for (size_t k = 0; k < n / 2; ++k) {
-            double angle = -2.0 * M_PI * k / n;
-            std::complex<double> t = std::exp(std::complex<double>(0, angle)) * odd_fft[k];
-            result[k] = even_fft[k] + t;
-            result[k + n / 2] = even_fft[k] - t;
-        }
-
-        return result;
+        return x;
     }
 
     /**
@@ -156,6 +154,8 @@ private:
     bool analyzeFrequencyDomain() {
         FrequencyDomain fd = analyze();
         
+        if (fd.magnitudes.empty()) return false;
+
         // Calculate mean and stddev of magnitudes
         double mean_mag = std::accumulate(fd.magnitudes.begin(), fd.magnitudes.end(), 0.0) 
                          / fd.magnitudes.size();
@@ -171,18 +171,18 @@ private:
         double max_magnitude = *std::max_element(fd.magnitudes.begin(), fd.magnitudes.end());
         
         // Anomaly if magnitude is > 3 sigma above mean
-        if (stddev_mag > 0.0 && max_magnitude > mean_mag + 3.0 * stddev_mag) {
+        if (stddev_mag > 0.0 && max_magnitude > mean_mag + 4.0 * stddev_mag) {
             return true;
         }
 
         // Check for unusual dominant frequency (outside normal range 0-50 Hz)
-        if (fd.dominant_freq > 50.0) {
+        if (fd.dominant_freq > 60.0) {
             return true;
         }
 
         // Check for excessive total power
         double avg_power = fd.total_power / fd.magnitudes.size();
-        if (avg_power > 100.0) { // Threshold for excessive vibration power
+        if (avg_power > 250.0) { // Adjusted threshold
             return true;
         }
 

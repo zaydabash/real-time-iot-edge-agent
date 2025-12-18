@@ -1,15 +1,15 @@
 /**
- * Tests for Isolation Forest anomaly detection engine
+ * Tests for Median Deviation anomaly detection engine
  */
 
-import { IsolationForestEngine } from '../isoforest';
+import { MedianDeviationEngine } from '../median-deviation';
 import { MetricPoint } from '../engine';
 
-describe('IsolationForestEngine', () => {
-  let engine: IsolationForestEngine;
+describe('MedianDeviationEngine', () => {
+  let engine: MedianDeviationEngine;
 
   beforeEach(() => {
-    engine = new IsolationForestEngine(20, 95); // Small window for testing
+    engine = new MedianDeviationEngine(20, 95); // Small window for testing
   });
 
   it('should detect anomalies in multi-dimensional space', async () => {
@@ -35,12 +35,13 @@ describe('IsolationForestEngine', () => {
     const results = await engine.scoreBatch(deviceId, [anomalousPoint]);
 
     expect(results.length).toBe(1);
-    // Should detect anomaly (may vary based on threshold)
+    // Should detect anomaly
+    expect(results[0].isAnomaly).toBe(true);
     expect(results[0].score).toBeGreaterThan(0);
   });
 
   it('should return correct engine type', () => {
-    expect(engine.getType()).toBe('isoforest');
+    expect(engine.getType()).toBe('median-deviation');
   });
 
   it('should handle empty points gracefully', async () => {

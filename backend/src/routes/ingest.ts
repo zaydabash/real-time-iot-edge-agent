@@ -6,14 +6,28 @@
 
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
+import { rateLimit } from 'express-rate-limit';
 import { PrismaClient } from '@prisma/client';
 import { createAnomalyEngine } from '../anomaly';
 import { emitMetricNew, emitAnomalyNew } from '../realtime';
+import { apiKeyAuth } from '../middleware/auth';
 import { logger } from '../utils/logger';
 
 const router = Router();
 const prisma = new PrismaClient();
 const anomalyEngine = createAnomalyEngine();
+
+// Rate limiting for ingest: 20 requests per minute per IP
+const ingestLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 20,
+  message: { error: 'Too many requests', message: 'Rate limit exceeded for ingest' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+router.use(ingestLimiter);
+router.use(apiKeyAuth);
 
 // Validation schema
 const MetricSchema = z.object({
@@ -32,11 +46,11 @@ const IngestSchema = z.object({
 router.post('/', async (req: Request, res: Response) => {
   try {
     logger.debug('Received ingest request', { body: req.body });
-    
+
     // Validate request body
     const body = IngestSchema.parse(req.body);
     const { deviceId, metrics } = body;
-    
+
     logger.info(`Ingesting ${metrics.length} metrics for device ${deviceId}`);
 
     // Check if device exists, create if allowed

@@ -22,7 +22,7 @@ const deviceBuffers: Map<string, BufferItem[]> = new Map();
 
 interface BufferItem {
   deviceId: string;
-  metric: MetricData;
+  metric: any; // Result of prisma.metric.create
   timestamp: Date;
 }
 
@@ -251,32 +251,23 @@ async function processBatchIfReady(deviceId: string): Promise<void> {
     voltage_v: item.metric.voltage_v,
   }));
 
-    try {
-      let scoredPoints: Array<{ index: number; score: number; isAnomaly: boolean }> = [];
+  try {
+    let scoredPoints: Array<{ index: number; score: number; isAnomaly: boolean }> = [];
 
-      if (PY_ML_ENABLE) {
-        // Use Python ML service (needs ts field)
-        try {
-          const pointsWithTs = batch.map((item) => ({
-            ts: item.metric.ts.toISOString(),
-            temperature_c: item.metric.temperature_c,
-            vibration_g: item.metric.vibration_g,
-            humidity_pct: item.metric.humidity_pct,
-            voltage_v: item.metric.voltage_v,
-          }));
-          scoredPoints = await scoreBatch(deviceId, pointsWithTs);
-        } catch (error) {
-          logger.warn(`Python ML service failed, falling back to z-score:`, error);
-          // Fallback to z-score
-          const zScoreResults = await zScoreEngine.scoreBatch(deviceId, points);
-          scoredPoints = zScoreResults.map((r, idx) => ({
-            index: idx,
-            score: r.score,
-            isAnomaly: r.isAnomaly,
-          }));
-        }
-      } else {
-        // Use z-score engine directly
+    if (PY_ML_ENABLE) {
+      // Use Python ML service (needs ts field)
+      try {
+        const pointsWithTs = batch.map((item) => ({
+          ts: item.metric.ts.toISOString(),
+          temperature_c: item.metric.temperature_c,
+          vibration_g: item.metric.vibration_g,
+          humidity_pct: item.metric.humidity_pct,
+          voltage_v: item.metric.voltage_v,
+        }));
+        scoredPoints = await scoreBatch(deviceId, pointsWithTs);
+      } catch (error) {
+        logger.warn(`Python ML service failed, falling back to z-score:`, error);
+        // Fallback to z-score
         const zScoreResults = await zScoreEngine.scoreBatch(deviceId, points);
         scoredPoints = zScoreResults.map((r, idx) => ({
           index: idx,
@@ -284,10 +275,19 @@ async function processBatchIfReady(deviceId: string): Promise<void> {
           isAnomaly: r.isAnomaly,
         }));
       }
+    } else {
+      // Use z-score engine directly
+      const zScoreResults = await zScoreEngine.scoreBatch(deviceId, points);
+      scoredPoints = zScoreResults.map((r, idx) => ({
+        index: idx,
+        score: r.score,
+        isAnomaly: r.isAnomaly,
+      }));
+    }
 
-      if (scoredPoints.length > 0) {
-        await storeAnomalies(deviceId, batch, scoredPoints);
-      }
+    if (scoredPoints.length > 0) {
+      await storeAnomalies(deviceId, batch, scoredPoints);
+    }
   } catch (error) {
     logger.error(`Error processing batch for device ${deviceId}:`, error);
   }
@@ -312,7 +312,7 @@ async function storeAnomalies(
         metricId: item.metric.id,
         ts: item.metric.ts,
         score: s.score,
-        type: PY_ML_ENABLE ? 'isoforest' : 'zscore',
+        type: PY_ML_ENABLE ? 'isoforest' : 'median-deviation',
         flagged: true,
       };
     });

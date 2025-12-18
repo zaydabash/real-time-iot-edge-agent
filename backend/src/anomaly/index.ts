@@ -6,20 +6,21 @@
  */
 
 import { AnomalyEngine } from './engine';
-import { IsolationForestEngine } from './isoforest';
+import { MedianDeviationEngine } from './median-deviation';
 import { ZScoreEngine } from './zscore';
 
 export function createAnomalyEngine(): AnomalyEngine {
-  const engineType = process.env.ANOMALY_ENGINE || 'isoforest';
+  const engineType = process.env.ANOMALY_ENGINE || 'median-deviation';
   const windowSize = parseInt(process.env.ANOMALY_WINDOW_SIZE || '512', 10);
   const thresholdPercentile = parseInt(process.env.ANOMALY_THRESHOLD_PERCENTILE || '95', 10);
 
   switch (engineType.toLowerCase()) {
-    case 'isoforest':
+    case 'median-deviation':
+    case 'isoforest': // Backward compatibility
       try {
-        return new IsolationForestEngine(windowSize, thresholdPercentile);
+        return new MedianDeviationEngine(windowSize, thresholdPercentile);
       } catch (error) {
-        console.warn('Failed to initialize Isolation Forest, falling back to Z-Score:', error);
+        console.warn('Failed to initialize Median Deviation engine, falling back to Z-Score:', error);
         return new ZScoreEngine(200, 3.0);
       }
     case 'zscore':
@@ -31,6 +32,6 @@ export function createAnomalyEngine(): AnomalyEngine {
 }
 
 export { AnomalyEngine, MetricPoint, AnomalyResult } from './engine';
-export { IsolationForestEngine } from './isoforest';
+export { MedianDeviationEngine } from './median-deviation';
 export { ZScoreEngine } from './zscore';
 

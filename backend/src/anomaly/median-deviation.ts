@@ -1,37 +1,39 @@
 /**
- * Isolation Forest Anomaly Detection Engine
+ * Median Deviation Anomaly Detection Engine
  * 
- * Uses a simplified isolation forest algorithm to detect anomalies
- * in multi-dimensional metric space.
+ * This engine uses a robust statistical measure (Median Absolute Deviation)
+ * to detect outliers in multi-dimensional metric space.
  * 
- * Note: This is a simplified implementation. For production use,
- * consider using a more robust library like ml-isolation-forest
- * or implementing a full isolation forest algorithm.
+ * Note: This was previously misleadingly named "Isolation Forest". It is a
+ * lightweight, median-based distance heuristic that is efficient for 
+ * edge-constrained environments but lacks the high-dimensional relational 
+ * modeling of a true tree-based Isolation Forest.
  */
 
 import { AnomalyEngine, AnomalyResult, MetricPoint } from './engine';
 
-// Simplified Isolation Forest implementation
-class SimpleIsolationForest {
+/**
+ * Robust Median-based outlier detection
+ */
+class MedianDeviationModel {
   private contamination: number;
-  private nEstimators: number;
-  private maxSamples: number;
 
-  constructor(contamination: number = 0.1, nEstimators: number = 100, maxSamples: number = 256) {
+  constructor(contamination: number = 0.1) {
     this.contamination = contamination;
-    this.nEstimators = nEstimators;
-    this.maxSamples = maxSamples;
   }
 
-  // Simplified anomaly score based on distance from median
+  /**
+   * Score each point based on its distance from the feature medians,
+   * normalized by the Median Absolute Deviation (MAD).
+   */
   score(features: number[][]): number[] {
     if (features.length === 0) return [];
 
     const nFeatures = features[0].length;
     const medians: number[] = [];
-    const mads: number[] = []; // Median Absolute Deviation
+    const mads: number[] = [];
 
-    // Calculate median and MAD for each feature
+    // Calculate median and MAD for each feature (robust statistics)
     for (let i = 0; i < nFeatures; i++) {
       const values = features.map(f => f[i]).sort((a, b) => a - b);
       const median = values[Math.floor(values.length / 2)];
@@ -39,25 +41,26 @@ class SimpleIsolationForest {
       
       const deviations = values.map(v => Math.abs(v - median));
       deviations.sort((a, b) => a - b);
+      // Use 1 as fallback for MAD to avoid division by zero
       const mad = deviations[Math.floor(deviations.length / 2)] || 1;
       mads.push(mad);
     }
 
-    // Score each point based on distance from median
+    // Score each point based on aggregate normalized distance
     return features.map(point => {
       let totalDistance = 0;
       for (let i = 0; i < nFeatures; i++) {
         const normalizedDistance = Math.abs(point[i] - medians[i]) / (mads[i] || 1);
         totalDistance += normalizedDistance;
       }
-      // Lower score = more anomalous (simplified)
+      // Negative aggregate distance (lower = more anomalous)
       return -totalDistance / nFeatures;
     });
   }
 }
 
-export class IsolationForestEngine implements AnomalyEngine {
-  private forests: Map<string, SimpleIsolationForest> = new Map();
+export class MedianDeviationEngine implements AnomalyEngine {
+  private models: Map<string, MedianDeviationModel> = new Map();
   private windowSize: number;
   private thresholdPercentile: number;
   private recentPoints: Map<string, MetricPoint[]> = new Map();
@@ -68,7 +71,7 @@ export class IsolationForestEngine implements AnomalyEngine {
   }
 
   getType(): string {
-    return 'isoforest';
+    return 'median-deviation';
   }
 
   async scoreBatch(deviceId: string, points: MetricPoint[]): Promise<AnomalyResult[]> {
@@ -83,7 +86,7 @@ export class IsolationForestEngine implements AnomalyEngine {
     }
     this.recentPoints.set(deviceId, devicePoints);
 
-    // Need at least 2 points to train
+    // Need at least 2 points to distinguish outliers
     if (devicePoints.length < 2) {
       return points.map((_, idx) => ({
         pointIndex: idx,
@@ -92,12 +95,12 @@ export class IsolationForestEngine implements AnomalyEngine {
       }));
     }
 
-    // Get or create forest for this device
-    if (!this.forests.has(deviceId)) {
-      this.forests.set(deviceId, new SimpleIsolationForest(0.1, 100, Math.min(256, devicePoints.length)));
+    // Get or create model for this device
+    if (!this.models.has(deviceId)) {
+      this.models.set(deviceId, new MedianDeviationModel(0.1));
     }
 
-    const forest = this.forests.get(deviceId)!;
+    const model = this.models.get(deviceId)!;
 
     // Prepare features
     const allFeatures = devicePoints.map(p => [
@@ -114,8 +117,8 @@ export class IsolationForestEngine implements AnomalyEngine {
       p.voltage_v,
     ]);
 
-    // Score all points
-    const allScores = forest.score(allFeatures);
+    // Score window to establish threshold
+    const allScores = model.score(allFeatures);
     
     // Calculate threshold from percentile
     const sortedScores = [...allScores].sort((a, b) => a - b);
@@ -124,14 +127,14 @@ export class IsolationForestEngine implements AnomalyEngine {
     );
     const threshold = sortedScores[thresholdIndex] || 0;
 
-    // Score only the new points
-    const newScores = forest.score(newFeatures);
+    // Score the specific batch
+    const newScores = model.score(newFeatures);
 
     // Return results
     return newScores.map((score, idx) => ({
       pointIndex: idx,
-      score: Math.abs(score), // Use absolute value for display
-      isAnomaly: score < threshold, // Lower scores indicate anomalies
+      score: Math.abs(score),
+      isAnomaly: score < threshold,
     }));
   }
 }
