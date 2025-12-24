@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getDevices, Device } from '@/lib/api';
+import { fetchDevices, Device } from '@/lib/api';
 import MapCard from '@/components/MapCard';
 
 export default function MapPage() {
@@ -14,7 +14,7 @@ export default function MapPage() {
 
   async function loadDevices() {
     try {
-      const data = await getDevices();
+      const data = await fetchDevices();
       setDevices(data);
     } catch (error) {
       console.error('Failed to load devices:', error);

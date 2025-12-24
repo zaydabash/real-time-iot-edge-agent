@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import React from 'react';
 import dynamic from 'next/dynamic';
 import { Metric } from '@/lib/api';
 
@@ -20,26 +20,6 @@ export default function PlotlyChart({
   title,
   height = 400,
 }: PlotlyChartProps) {
-  const plotRef = useRef<any>(null);
-
-  useEffect(() => {
-    if (!plotRef.current || !data.length) return;
-
-    // Downsample if too many points (keep every Nth point)
-    const maxPoints = 1000;
-    const step = Math.max(1, Math.floor(data.length / maxPoints));
-    const sampledData = data.filter((_, i) => i % step === 0 || i === data.length - 1);
-
-    const x = sampledData.map((m) => new Date(m.ts));
-    const y = sampledData.map((m) => m[metricType]);
-
-    const update = {
-      x: [x],
-      y: [y],
-    };
-
-    plotRef.current.extendTraces(update, [0]);
-  }, [data, metricType]);
 
   if (!data.length) {
     return (
@@ -57,7 +37,7 @@ export default function PlotlyChart({
   const x = sampledData.map((m) => new Date(m.ts));
   const y = sampledData.map((m) => m[metricType]);
 
-  const plotData = [
+  const plotData: any = [
     {
       x,
       y,
@@ -71,7 +51,7 @@ export default function PlotlyChart({
     },
   ];
 
-  const layout = {
+  const layout: any = {
     title: {
       text: title,
       font: { size: 16 },
@@ -89,7 +69,7 @@ export default function PlotlyChart({
     hovermode: 'closest' as const,
   };
 
-  const config = {
+  const config: any = {
     responsive: true,
     displayModeBar: true,
     modeBarButtonsToRemove: ['pan2d', 'lasso2d'],
@@ -97,8 +77,8 @@ export default function PlotlyChart({
 
   return (
     <div className="w-full">
+      {/* @ts-ignore - react-plotly.js types are complex */}
       <Plot
-        ref={plotRef}
         data={plotData}
         layout={layout}
         config={config}

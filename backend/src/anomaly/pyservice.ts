@@ -66,7 +66,7 @@ export async function scoreBatch(
       throw new Error(`Python ML service error: ${response.status} - ${errorText}`);
     }
 
-    const data: ScoreBatchResponse = await response.json();
+    const data = await response.json() as ScoreBatchResponse;
     return data.scores;
   } catch (error: any) {
     if (error.name === 'AbortError') {
