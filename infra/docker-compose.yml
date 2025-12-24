@@ -87,6 +87,7 @@ services:
         condition: service_healthy
       ml-service:
         condition: service_healthy
+    restart: unless-stopped
     command: >
       sh -c "
         echo 'Waiting for database...' &&

@@ -94,21 +94,36 @@ jobs:
       - name: Start Docker stack (HTTP pipeline)
       # Use the same compose file as local dev; MQTT/Python ML flags use defaults (HTTP-only path)
         run: |
-          docker compose up -d --build
+          docker compose up -d --build db mosquitto ml-service
+          echo "Waiting for dependencies to be healthy..."
+          sleep 15
+          docker compose up -d --build backend dashboard
+        env:
+          MQTT_ENABLE: "false"
+          PY_ML_ENABLE: "false"
 
       - name: Wait for backend health
         run: |
           set -e
-          for i in $(seq 1 30); do
+          echo "Checking service status..."
+          docker compose ps
+          echo "Backend logs:"
+          docker compose logs backend --tail=50 || true
+          echo "Mosquitto logs:"
+          docker compose logs mosquitto --tail=20 || true
+          echo "ML service logs:"
+          docker compose logs ml-service --tail=20 || true
+          for i in $(seq 1 40); do
             if curl -sf http://localhost:8080/api/health > /dev/null; then
               echo "Backend is healthy"
               exit 0
             fi
-            echo "Waiting for backend health... ($i/30)"
+            echo "Waiting for backend health... ($i/40)"
             sleep 5
           done
           echo "Backend failed to become healthy"
           docker compose logs backend || true
+          docker compose ps || true
           exit 1
 
       - name: Ingest sample metrics
