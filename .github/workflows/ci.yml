@@ -24,6 +24,8 @@ jobs:
         run: npm ci || npm install
       - name: Validate Prisma schema
         run: npx prisma validate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/iot
       - name: Run linter
         run: npm run lint || true
       - name: Run tests
